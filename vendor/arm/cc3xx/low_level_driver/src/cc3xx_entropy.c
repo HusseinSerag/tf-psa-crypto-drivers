@@ -124,6 +124,7 @@ cc3xx_err_t cc3xx_use_persistent_entropy_context(void *buf, size_t buf_size)
 {
     if (buf == NULL ||
         buf_size < sizeof(struct cc3xx_entropy_persistent_context_t)) {
+        FATAL_ERR(CC3XX_ERR_INVALID_INPUT_LENGTH);
         return CC3XX_ERR_INVALID_INPUT_LENGTH;
     }
 
