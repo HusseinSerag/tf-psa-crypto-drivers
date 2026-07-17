@@ -10,8 +10,12 @@
 #include "cc3xx_dev.h"
 #include "cc3xx_ahbm.h"
 #include "cc3xx_engine_state.h"
+#include "cc3xx_entropy.h"
 #include <assert.h>
 #include "cc3xx_rng.h"
+#ifdef CC3XX_CONFIG_PERSISTENT_CONTEXT_HEADER
+#include CC3XX_CONFIG_PERSISTENT_CONTEXT_HEADER
+#endif
 #include "cc3xx_drv.h"
 #include "tfm_utils.h"
 
@@ -98,6 +102,38 @@ static void check_features(void)
 #ifdef CC3XX_CONFIG_RNG_ENABLE
     assert(P_CC3XX->host_rgf.host_boot & (1 << 11)); /* RNG_EXISTS_LOCAL */
 #endif
+}
+
+static cc3xx_err_t setup_persistent_contexts(void)
+{
+#if (defined(CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT) && \
+     defined(CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT_BUFFER)) || \
+    (defined(CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT) && \
+     defined(CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT_BUFFER))
+    cc3xx_err_t err;
+#endif
+
+#if defined(CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT) && \
+    defined(CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT_BUFFER)
+    err = cc3xx_use_persistent_entropy_context(
+        &CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT_BUFFER,
+        sizeof(CC3XX_CONFIG_PERSISTENT_ENTROPY_CONTEXT_BUFFER));
+    if (err != CC3XX_ERR_SUCCESS) {
+        return err;
+    }
+#endif
+
+#if defined(CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT) && \
+    defined(CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT_BUFFER)
+    err = cc3xx_use_persistent_drbg(
+        &CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT_BUFFER,
+        sizeof(CC3XX_CONFIG_PERSISTENT_DRBG_CONTEXT_BUFFER));
+    if (err != CC3XX_ERR_SUCCESS) {
+        return err;
+    }
+#endif
+
+    return CC3XX_ERR_SUCCESS;
 }
 
 static void setup_ahbm(void)
@@ -217,6 +253,11 @@ cc3xx_err_t cc3xx_lowlevel_init(void)
     /* Reset engine to PASSTHROUGH / None */
     cc3xx_engine_in_use = CC3XX_ENGINE_NONE;
     P_CC3XX->cc_ctl.crypto_ctl = CC3XX_ENGINE_NONE;
+
+    err = setup_persistent_contexts();
+    if (err != CC3XX_ERR_SUCCESS) {
+        return err;
+    }
 
     /* Setup AHB5 Manager Interface */
     setup_ahbm();
