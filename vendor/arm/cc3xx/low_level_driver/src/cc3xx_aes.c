@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include "endian.h"
 #include <stdint.h>
+#include <stddef.h>
 
 #include "cc3xx_aes.h"
 #include "cc3xx_dev.h"
@@ -608,7 +609,7 @@ cc3xx_err_t cc3xx_lowlevel_aes_init(
 void cc3xx_lowlevel_aes_get_state(struct cc3xx_aes_state_t *state)
 {
 #ifdef CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE
-    memcpy(state, &aes_state, sizeof(*state));
+    memcpy(state, &aes_state, offsetof(struct cc3xx_aes_state_t, key_buf));
     cc3xx_dpa_hardened_word_copy(state->key_buf,
                                  aes_state.key_buf,
                                  sizeof(state->key_buf) / sizeof(uint32_t));
@@ -642,7 +643,7 @@ cc3xx_err_t cc3xx_lowlevel_aes_set_state(const struct cc3xx_aes_state_t *state)
     cc3xx_err_t err;
 
 #ifdef CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE
-    memcpy(&aes_state, state, sizeof(*state));
+    memcpy(&aes_state, state, offsetof(struct cc3xx_aes_state_t, key_buf));
     cc3xx_dpa_hardened_word_copy(aes_state.key_buf,
                                  state->key_buf,
                                  sizeof(state->key_buf) / sizeof(uint32_t));
