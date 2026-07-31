@@ -153,6 +153,11 @@ static psa_status_t ecdsa_verify(const psa_key_attributes_t *attributes, cc3xx_e
 
     const size_t modulus_sz = cc3xx_lowlevel_ec_get_modulus_size_from_curve(curve_id);
 
+    psa_key_bits_t key_bits = psa_get_key_bits(attributes);
+    if (sig_length != PSA_ECDSA_SIGNATURE_SIZE(key_bits)) {
+        return PSA_ERROR_INVALID_SIGNATURE;
+    }
+    
     uint32_t sig_r[modulus_sz / sizeof(uint32_t)];
     uint32_t sig_s[modulus_sz / sizeof(uint32_t)];
 
