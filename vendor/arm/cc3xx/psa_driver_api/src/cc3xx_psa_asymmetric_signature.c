@@ -60,6 +60,15 @@ static psa_status_t ecdsa_sign(bool is_deterministic, cc3xx_ec_curve_id_t curve_
     }
 
     const size_t modulus_sz = cc3xx_lowlevel_ec_get_modulus_size_from_curve(curve_id);
+    const size_t component_sz = key_length;
+
+    CC3XX_ASSERT(modulus_sz >= component_sz);
+
+    if (sig_length < 2u * component_sz) {
+        return PSA_ERROR_BUFFER_TOO_SMALL;
+    }
+
+    const size_t padding_size = modulus_sz - component_sz;
 
     uint32_t scratch_r[modulus_sz / sizeof(uint32_t)];
     uint32_t scratch_s[modulus_sz / sizeof(uint32_t)];
@@ -106,10 +115,21 @@ static psa_status_t ecdsa_sign(bool is_deterministic, cc3xx_ec_curve_id_t curve_
         return cc3xx_to_psa_err(err);
     }
 
+    /*
+     * The low-level API returns r and s using the curve's word-aligned
+     * modulus size, while PSA requires each component to have the same size
+     * as the private key. Skip the leading padding bytes when copying each component
+     * into the PSA r || s output, after verifying that they are all zero.
+     */
+    for (size_t i = 0; i < padding_size; i++) {
+        CC3XX_ASSERT(*((const uint8_t *)scratch_r + i) == 0);
+        CC3XX_ASSERT(*((const uint8_t *)scratch_s + i) == 0);
+    }
+
     /* Copy the result in the correct output buffer */
-    memcpy(sig, scratch_r, sig_r_sz);
-    memcpy(&sig[sig_r_sz], scratch_s, sig_s_sz);
-    *sig_size = sig_r_sz + sig_s_sz;
+    memcpy(sig, (const uint8_t *)scratch_r + padding_size, component_sz);
+    memcpy(&sig[component_sz], (const uint8_t *)scratch_s + padding_size, component_sz);
+    *sig_size = 2 * component_sz;
 
     return PSA_SUCCESS;
 }
