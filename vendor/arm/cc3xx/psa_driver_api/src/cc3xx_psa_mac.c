@@ -450,12 +450,16 @@ psa_status_t cc3xx_mac_sign_finish(cc3xx_mac_operation_t *operation, /* cppcheck
 #if defined(PSA_WANT_ALG_HMAC)
     if (PSA_ALG_IS_HMAC(operation->alg)) {
         const size_t hash_length = PSA_HASH_LENGTH(operation->alg);
+
         if (hash_length == 0U) {
             return PSA_ERROR_NOT_SUPPORTED;
         }
         uint32_t actual_mac[hash_length / sizeof(uint32_t)];
 
-        CC3XX_ASSERT(mac_size >= operation->hmac.tag_len);
+        if (mac_size < operation->hmac.tag_len) {
+            *mac_length = 0;
+            return PSA_ERROR_BUFFER_TOO_SMALL;
+        }
 
         status = cc3xx_lowlevel_hmac_finish(&(operation->hmac), actual_mac,
                                             sizeof(actual_mac), mac_length);
@@ -479,6 +483,7 @@ psa_status_t cc3xx_mac_verify_finish(cc3xx_mac_operation_t *operation, /* cppche
 
 #if defined(PSA_WANT_ALG_CMAC) || defined(PSA_WANT_ALG_HMAC)
     const size_t hash_length = mac_output_size(operation->alg);
+
     if (hash_length == 0U) {
         return PSA_ERROR_BAD_STATE;
     }
@@ -597,4 +602,4 @@ out:
 
 #endif /* CC3XX_CONFIG_ENABLE_MAC_INTEGRATED_API */
 }
-/** @} */ // end of psa_mac
+/** @} */ /* end of psa_mac */
