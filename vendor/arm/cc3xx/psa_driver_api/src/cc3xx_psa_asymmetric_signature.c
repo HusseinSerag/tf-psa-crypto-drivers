@@ -90,12 +90,20 @@ static psa_status_t ecdsa_sign(bool is_deterministic, cc3xx_ec_curve_id_t curve_
         }
     }
 
-    cc3xx_dpa_hardened_word_copy(key_buf, (uint32_t *)key, key_length / sizeof(uint32_t));
-
+    if (padding_size > 0) {
+        memset(key_buf, 0, sizeof(key_buf));
+    }
+   
+    if (padding_size != 0 || ((uintptr_t)key & (sizeof(uint32_t) - 1)) != 0) {
+        cc3xx_dpa_hardened_byte_copy((uint8_t *)key_buf + padding_size, key, component_sz);
+    } else {
+        cc3xx_dpa_hardened_word_copy(key_buf, (uint32_t *)key, component_sz / sizeof(uint32_t));
+    }   
+   
     if (is_deterministic) {
 
         err = cc3xx_lowlevel_ecdsa_sign_deterministic(curve_id,
-                key_buf, key_length,
+                key_buf, sizeof(key_buf),
                 hash, hash_size,
                 scratch_r, sizeof(scratch_r), &sig_r_sz,
                 scratch_s, sizeof(scratch_s), &sig_s_sz);
@@ -103,7 +111,7 @@ static psa_status_t ecdsa_sign(bool is_deterministic, cc3xx_ec_curve_id_t curve_
     } else {
 
         err = cc3xx_lowlevel_ecdsa_sign(curve_id,
-                key_buf, key_length,
+                key_buf, sizeof(key_buf),
                 hash, hash_size,
                 scratch_r, sizeof(scratch_r), &sig_r_sz,
                 scratch_s, sizeof(scratch_s), &sig_s_sz);
@@ -229,8 +237,10 @@ static psa_status_t ecdsa_verify(const psa_key_attributes_t *attributes, cc3xx_e
         key_length_public = key_length;
     }
 
-    memcpy(key_x, &p_key[1], (key_length_public - 1) / 2);
-    memcpy(key_y, &p_key[1 + (key_length_public - 1) / 2], (key_length_public - 1) / 2);
+    const size_t component_sz = (key_length_public - 1) / 2;
+
+    memmove(key_x, &p_key[1], component_sz);
+    memmove(key_y, &p_key[1 + component_sz], component_sz);
 
     err = cc3xx_lowlevel_ecdsa_verify(curve_id,
                         (const uint32_t *)key_x, modulus_size_in_bytes,
