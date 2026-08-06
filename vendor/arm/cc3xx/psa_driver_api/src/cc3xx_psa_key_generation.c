@@ -147,7 +147,12 @@ psa_status_t cc3xx_export_public_key(const psa_key_attributes_t *attributes,
         }
 
         const size_t modulus_sz = cc3xx_lowlevel_ec_get_modulus_size_from_curve(curve_id);
+        const size_t component_sz = PSA_BITS_TO_BYTES(key_bits);
+        
+        CC3XX_ASSERT(modulus_sz >= component_sz);
 
+        const size_t padding_sz = modulus_sz - component_sz;
+    
         /* Scratch aligned to 32 bits and big enough for the worst case scenario */
         uint32_t scratch_x[modulus_sz / sizeof(uint32_t)];
         uint32_t scratch_y[modulus_sz / sizeof(uint32_t)];
@@ -155,13 +160,18 @@ psa_status_t cc3xx_export_public_key(const psa_key_attributes_t *attributes,
         uint32_t key_buffer_local[
             CEIL_ALLOC_SZ(PSA_KEY_EXPORT_ECC_KEY_PAIR_MAX_SIZE(key_bits), sizeof(uint32_t))];
 
-        cc3xx_dpa_hardened_word_copy(
-            key_buffer_local,
-            (const uint32_t *)key_buffer,
-            sizeof(key_buffer_local) / sizeof(uint32_t));
+        if (padding_sz > 0) {
+            memset(key_buffer_local, 0, sizeof(key_buffer_local));
+        }
+
+        if (padding_sz != 0 || ((uintptr_t)key_buffer & (sizeof(uint32_t) - 1)) != 0) {
+            cc3xx_dpa_hardened_byte_copy((uint8_t *)key_buffer_local + padding_sz, key_buffer, component_sz);
+        } else {
+            cc3xx_dpa_hardened_word_copy(key_buffer_local, (uint32_t *)key_buffer, component_sz / sizeof(uint32_t));
+        }
 
         err = cc3xx_lowlevel_ecdsa_getpub(
-            curve_id, key_buffer_local, key_buffer_size,
+            curve_id, key_buffer_local, sizeof(key_buffer_local),
             scratch_x, sizeof(scratch_x), &pub_key_x_sz,
             scratch_y, sizeof(scratch_y), &pub_key_y_sz);
 
@@ -171,9 +181,9 @@ psa_status_t cc3xx_export_public_key(const psa_key_attributes_t *attributes,
 
         /* Copy the result in the correct output buffer marking it as uncompressed */
         data[0] = 0x04;
-        memcpy(&data[1], scratch_x, pub_key_x_sz);
-        memcpy(&data[1 + pub_key_x_sz], scratch_y, pub_key_y_sz);
-        *data_length = 1 + pub_key_x_sz + pub_key_y_sz;
+        memcpy(&data[1], (const uint8_t *)scratch_x + padding_sz, component_sz);
+        memcpy(&data[1 + component_sz], (const uint8_t *)scratch_y + padding_sz, component_sz);
+        *data_length = 1 + 2 * component_sz;
 
         return PSA_SUCCESS;
 
