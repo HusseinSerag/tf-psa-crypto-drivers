@@ -69,8 +69,14 @@ psa_status_t cc3xx_key_agreement(
         }
 
         const size_t modulus_sz = cc3xx_lowlevel_ec_get_modulus_size_from_curve(curve_id);
+        const size_t component_sz = PSA_BITS_TO_BYTES(key_bits);
+        const size_t expected_size = 1 + 2 * component_sz;
 
-        /* Scratch aligned to 32 bits and big enough for the worst case scenario */
+        if (publ_key_size != expected_size) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+
+        /* Scratch aligned to 32 bits and sized for the worst-case curve. */
         uint32_t shared_secret_local[modulus_sz / sizeof(uint32_t)];
         size_t shared_secret_sz;
         uint32_t priv_key_local[
@@ -80,18 +86,26 @@ psa_status_t cc3xx_key_agreement(
         const size_t pub_key_x_sz = (publ_key_size - 1) / 2;
         const size_t pub_key_y_sz = (publ_key_size - 1) / 2;
 
+        const size_t padding_size = modulus_sz - component_sz;
+
+        memset(priv_key_local, 0, sizeof(priv_key_local));
+        memset(pub_key_x_local, 0, sizeof(pub_key_x_local));
+        memset(pub_key_y_local, 0, sizeof(pub_key_y_local));
+
         assert(publ_key[0] == 0x04);
-        memcpy(pub_key_x_local, &publ_key[1], pub_key_x_sz);
-        memcpy(pub_key_y_local, &publ_key[1 + pub_key_x_sz], pub_key_y_sz);
+        memcpy((uint8_t *)pub_key_x_local + padding_size, &publ_key[1], pub_key_x_sz);
+        memcpy((uint8_t *)pub_key_y_local + padding_size,
+               &publ_key[1 + pub_key_x_sz], pub_key_y_sz);
 
-        cc3xx_dpa_hardened_word_copy(
-            priv_key_local,
-            (const uint32_t *)priv_key,
-            sizeof(priv_key_local) / sizeof(uint32_t));
-
-        err = cc3xx_lowlevel_ecdh(curve_id, priv_key_local, priv_key_size,
-                    pub_key_x_local, pub_key_x_sz,
-                    pub_key_y_local, pub_key_y_sz,
+        if (padding_size != 0 || ((uintptr_t)priv_key & (sizeof(uint32_t) - 1)) != 0) {
+                cc3xx_dpa_hardened_byte_copy((uint8_t *)priv_key_local + padding_size, priv_key, priv_key_size);
+            } else {
+                cc3xx_dpa_hardened_word_copy(priv_key_local, (const uint32_t *)priv_key, sizeof(priv_key_local) / sizeof(uint32_t));
+            }
+            
+        err = cc3xx_lowlevel_ecdh(curve_id, priv_key_local, modulus_sz,
+                    pub_key_x_local, modulus_sz,
+                    pub_key_y_local, modulus_sz,
                     shared_secret_local, sizeof(shared_secret_local), &shared_secret_sz);
 
         cc3xx_secure_erase_buffer(priv_key_local, sizeof(priv_key_local) / sizeof(uint32_t));
@@ -100,12 +114,15 @@ psa_status_t cc3xx_key_agreement(
             return cc3xx_to_psa_err(err);
         }
 
-        if (output_size < shared_secret_sz) {
+        if (output_size < shared_secret_sz - padding_size) {
             status = PSA_ERROR_BUFFER_TOO_SMALL;
         } else {
-            cc3xx_dpa_hardened_word_copy(
-                (uint32_t *)output, shared_secret_local, shared_secret_sz / sizeof(uint32_t));
-            *output_length = shared_secret_sz;
+            if(padding_size != 0 || ((uintptr_t)output & (sizeof(uint32_t) - 1)) != 0 ) {
+                cc3xx_dpa_hardened_byte_copy(output,(const uint8_t *)shared_secret_local + padding_size, component_sz);
+            } else {
+                cc3xx_dpa_hardened_word_copy(output, shared_secret_local, component_sz / sizeof(uint32_t));
+            }
+            *output_length = component_sz;
             status = PSA_SUCCESS;
         }
 
