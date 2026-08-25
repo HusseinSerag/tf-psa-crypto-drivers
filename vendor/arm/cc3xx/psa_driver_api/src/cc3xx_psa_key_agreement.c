@@ -76,6 +76,10 @@ psa_status_t cc3xx_key_agreement(
             return PSA_ERROR_INVALID_ARGUMENT;
         }
 
+        if (priv_key_size != component_sz) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+
         /* Scratch aligned to 32 bits and sized for the worst-case curve. */
         uint32_t shared_secret_local[modulus_sz / sizeof(uint32_t)];
         size_t shared_secret_sz;

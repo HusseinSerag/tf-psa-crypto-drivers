@@ -42,12 +42,12 @@ cc3xx_err_t cc3xx_lowlevel_ecdh(cc3xx_ec_curve_id_t curve_id,
         goto out;
     }
 
-    if (public_key_x_len > curve.modulus_size) {
+    if (public_key_x_len != curve.modulus_size) {
         err = CC3XX_ERR_ECDSA_INVALID_KEY;
         goto out;
     }
 
-    if (public_key_y_len > curve.modulus_size) {
+    if (public_key_y_len != curve.modulus_size) {
         err = CC3XX_ERR_ECDSA_INVALID_KEY;
         goto out;
     }
