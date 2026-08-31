@@ -29,6 +29,21 @@ extern "C" {
  */
 void cc3xx_dpa_hardened_word_copy(volatile uint32_t *dst,
                                   volatile const uint32_t *src, size_t word_count);
+
+/**
+ * @brief                        Copy a series of bytes in a randomised order.
+ *                               Intended to be used as a DPA countermeasure
+ *                               when copying key material in ordinary memory.
+ *
+ * @note                         This function may take a variable amount of
+ *                               time to execute.
+ *
+ * @param[out] dst               Destination buffer to copy into
+ * @param[in]  src               Source buffer to copy from.
+ * @param[in]  byte_count        The amount of bytes to copy.
+ */
+void cc3xx_dpa_hardened_byte_copy(volatile uint8_t *dst,
+                                  volatile const uint8_t *src, size_t byte_count);                                  
 /**
  * @brief Securely erases the buffer pointed by buf by overwriting it with random values. Assumes
  *        the size of the buffer in bytes is a multiple of 4
