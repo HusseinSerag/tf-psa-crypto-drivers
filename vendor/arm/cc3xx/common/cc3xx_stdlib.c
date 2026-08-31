@@ -28,6 +28,27 @@ void cc3xx_secure_erase_buffer(uint32_t *buf, size_t word_count)
         (uint8_t *)buf, word_count * sizeof(uint32_t),  CC3XX_RNG_LFSR);
 }
 
+void cc3xx_dpa_hardened_byte_copy(volatile uint8_t *dst,
+                                  volatile const uint8_t *src, size_t byte_count)
+{
+#if defined(CC3XX_CONFIG_DPA_MITIGATIONS_ENABLE)
+    uint8_t permutation_buf[byte_count];
+    size_t idx;
+
+    assert(byte_count <= UINT8_MAX);
+
+    cc3xx_lowlevel_rng_get_random_permutation(permutation_buf, byte_count);
+
+    for (idx = 0; idx < byte_count; idx++) {
+        dst[permutation_buf[idx]] = src[permutation_buf[idx]];
+    }
+#else
+    for (size_t idx = 0; idx < byte_count; idx++) {
+        dst[idx] = src[idx];
+    }
+#endif
+}                            
+
 /* The CC3XX driver uses word-aligned copies through this function when required.
  * If DPA mitigations are enabled, the copy shuffles words randomly on copy,
  * otherwise the copy happens linearly on 4-byte aligned boundaries. Note that a
