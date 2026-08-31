@@ -60,11 +60,14 @@ psa_status_t cc3xx_generate_key(const psa_key_attributes_t *attributes,
             if (CC3XX_IS_CURVE_ID_INVALID(curve_id)) {
                 return PSA_ERROR_NOT_SUPPORTED;
             }
-
+            const size_t modulus_sz = cc3xx_lowlevel_ec_get_modulus_size_from_curve(curve_id);
+            
             /* Local scratch with the required alignment */
             uint32_t key_buffer_local[
                 CEIL_ALLOC_SZ(PSA_KEY_EXPORT_ECC_KEY_PAIR_MAX_SIZE(key_bits), sizeof(uint32_t))];
             size_t gen_key_sz;
+            const size_t component_sz = PSA_BITS_TO_BYTES(key_bits);
+            const size_t padding_sz = modulus_sz - component_sz;
 
             err = cc3xx_lowlevel_ecdsa_genkey(
                 curve_id, key_buffer_local, sizeof(key_buffer_local), &gen_key_sz);
@@ -73,14 +76,18 @@ psa_status_t cc3xx_generate_key(const psa_key_attributes_t *attributes,
                 return cc3xx_to_psa_err(err);
             }
 
-            if (gen_key_sz > key_buffer_size) {
+            if (component_sz > key_buffer_size) {
                 return PSA_ERROR_BUFFER_TOO_SMALL;
             }
 
             /* Copy the generated key back in the output buffer */
-            assert(!(gen_key_sz % sizeof(uint32_t)));
-            cc3xx_dpa_hardened_word_copy((uint32_t *)key_buffer, key_buffer_local, gen_key_sz / sizeof(uint32_t));
-            *key_buffer_length = gen_key_sz;
+           assert(!(gen_key_sz % sizeof(uint32_t)));
+           if (padding_sz != 0 || ((uintptr_t)key_buffer & (sizeof(uint32_t) - 1)) != 0) {
+                cc3xx_dpa_hardened_byte_copy(key_buffer, (uint8_t *)key_buffer_local + padding_sz, component_sz);
+            } else {
+                cc3xx_dpa_hardened_word_copy((uint32_t *)key_buffer, key_buffer_local, component_sz / sizeof(uint32_t));
+            }
+            *key_buffer_length = component_sz;
 
             return PSA_SUCCESS;
         }
